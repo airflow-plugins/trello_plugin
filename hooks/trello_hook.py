@@ -3,6 +3,10 @@ import json
 import logging
 
 
+class EndpointNotSupported(Exception):
+    def __init__(self) -> None:
+        super().__init__("Specified endpoint not currently supported.")
+
 class TrelloHook(HttpHook):
     def __init__(
             self,
@@ -25,12 +29,7 @@ class TrelloHook(HttpHook):
         super().__init__(method, http_conn_id)
 
     def run(self, endpoint, data=None, headers=None, extra_options=None, extra_args={}):
-        print (endpoint, extra_args)
-        if '?' not in endpoint:
-            endpoint += '/?'
-        else:
-            endpoint += '&'
-
+        endpoint += '&' if '?' in endpoint else '/?'
         endpoint += self.authorization_params
 
         if 'fields' in extra_args and extra_args['fields']:
@@ -38,7 +37,7 @@ class TrelloHook(HttpHook):
 
             if isinstance(fields, list):
                 fields = ",".join(fields)
-            endpoint += '&fields={}'.format(fields)
+            endpoint += '&fields={fields}'
 
         if 'since' in extra_args and extra_args['since']:
             endpoint += '&since={}'.format(str(extra_args['since']))

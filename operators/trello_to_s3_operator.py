@@ -6,6 +6,13 @@ from trello_plugin.hooks.trello_hook import TrelloHook
 from tempfile import NamedTemporaryFile
 import json
 
+
+class EndpointNotSupported(Exception):
+
+    def __init__(self) -> None:
+        super().__init__("Specified endpoint not currently supported.")
+
+
 class TrelloToS3Operator(BaseOperator):
     """
     Trello to S3 Operator
@@ -54,15 +61,15 @@ class TrelloToS3Operator(BaseOperator):
 
         self.trello_conn_id = trello_conn_id
         self.endpoint = endpoint
-        
+
         self.since = since
         self.before = before
         self.fields = fields
-        
+
         self.s3_conn_id = s3_conn_id
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        
+
         self.hook = TrelloHook(http_conn_id=self.trello_conn_id)
 
         if self.endpoint not in (
@@ -71,15 +78,16 @@ class TrelloToS3Operator(BaseOperator):
             'cards',
             'checklists',
             'lists',
-            'members'):
-            raise Exception('Specified endpoint not currently supported.')
+                'members'):
+            raise EndpointNotSupported()
+
 
     def get_me(self, nested_object, extra_args):
         """
         Get specific nested object from 'members/me' endpoint.
         """
-        return self.hook.run('members/me/{}'.format(nested_object), extra_args=extra_args).json() 
-    
+        return self.hook.run('members/me/{nested_object}', extra_args=extra_args).json()
+
     def get_all(self, endpoints, extra_args={}):
         """
         Fetch results from multiple endpoints and
@@ -87,8 +95,9 @@ class TrelloToS3Operator(BaseOperator):
         """
         results = []
 
-        for endpoint in  endpoints: 
-            result = self.hook.run(endpoint, fields=self.fields, extra_args=extra_args).json()
+        for endpoint in endpoints:
+            result = self.hook.run(
+                endpoint, fields=self.fields, extra_args=extra_args).json()
             results += result
 
         return results
@@ -97,18 +106,18 @@ class TrelloToS3Operator(BaseOperator):
         boards_endpoint = 'members/me/boards'
         extra_args = {
             'fields': self.fields,
-            'since': self.since, 
+            'since': self.since,
             'before': self.before
         }
 
-        if self.endpoint is 'members': 
+        if self.endpoint is 'members':
             organizations = self.get_me('organizations', extra_args=extra_args)
             results = []
-            
+
             if organizations:
                 for org in organizations:
                     org_members = self.hook.run(
-                        'organizations/{}/members', extra_args=extra_args).json()
+                        'organizations/{}/members'.format(org['id']), extra_args=extra_args).json()
                     results += org_members
         elif self.endpoint is 'boards':
             results = self.hook.run(
@@ -116,14 +125,14 @@ class TrelloToS3Operator(BaseOperator):
         else:
             boards = self.hook.run(
                 boards_endpoint,
-                    extra_args={
-                        'fields': 'id', 
-                        'since' :self.since, 
-                        'before': self.before
-                    }).json()
+                extra_args={
+                    'fields': 'id',
+                    'since': self.since,
+                    'before': self.before
+                }).json()
             endpoints = [
                 "boards/{}/{}".format(board['id'],
-                                      self.endpoint, 
+                                      self.endpoint,
                                       extra_args=extra_args) for board in boards]
             results = self.get_all(endpoints, extra_args=extra_args)
 
